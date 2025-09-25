@@ -3,6 +3,106 @@ import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import 'terminos_screen.dart';
 
+/// 🔹 Tipos de snackbar
+enum SnackType { success, error, info, warning }
+
+/// 🔹 Widget reutilizable DocYaSnackbar
+class DocYaSnackbar {
+  static void show(
+    BuildContext context, {
+    required String title,
+    required String message,
+    SnackType type = SnackType.success,
+  }) {
+    Color startColor;
+    Color endColor;
+    IconData icon;
+
+    switch (type) {
+      case SnackType.success:
+        startColor = const Color(0xFF14B8A6);
+        endColor = const Color(0xFF0F2027);
+        icon = Icons.check_circle_rounded;
+        break;
+      case SnackType.error:
+        startColor = Colors.redAccent;
+        endColor = const Color(0xFF2C5364);
+        icon = Icons.error_rounded;
+        break;
+      case SnackType.info:
+        startColor = Colors.blueAccent;
+        endColor = const Color(0xFF2C5364);
+        icon = Icons.info_rounded;
+        break;
+      case SnackType.warning:
+        startColor = Colors.amber;
+        endColor = const Color(0xFF2C5364);
+        icon = Icons.warning_amber_rounded;
+        break;
+    }
+
+    final snackBar = SnackBar(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      content: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [startColor, endColor],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      duration: const Duration(seconds: 3),
+    );
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(snackBar);
+  }
+}
+
 class RegisterScreenPro extends StatefulWidget {
   const RegisterScreenPro({super.key});
 
@@ -21,13 +121,16 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
   final _dni = TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
-  String _provincia = "CABA"; // 👈 fija
+  String _provincia = "CABA"; // fija
   String? _localidad;
   bool _aceptaCondiciones = false;
   bool _loading = false;
   String? _error;
 
-  // URLs de Cloudinary después de subir las fotos
+  // Médico o enfermero
+  String _tipo = "medico";
+
+  // Fotos
   String? _fotoPerfil;
   String? _fotoDniFrente;
   String? _fotoDniDorso;
@@ -36,32 +139,16 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
   final _auth = AuthService();
   final picker = ImagePicker();
 
-  // Solo CABA → listado de comunas
-  // Solo CABA → listado simple de comunas
   final List<String> _comunas = [
-    "Comuna 1",
-    "Comuna 2",
-    "Comuna 3",
-    "Comuna 4",
-    "Comuna 5",
-    "Comuna 6",
-    "Comuna 7",
-    "Comuna 8",
-    "Comuna 9",
-    "Comuna 10",
-    "Comuna 11",
-    "Comuna 12",
-    "Comuna 13",
-    "Comuna 14",
-    "Comuna 15",
+    "Comuna 1", "Comuna 2", "Comuna 3", "Comuna 4", "Comuna 5",
+    "Comuna 6", "Comuna 7", "Comuna 8", "Comuna 9", "Comuna 10",
+    "Comuna 11", "Comuna 12", "Comuna 13", "Comuna 14", "Comuna 15",
   ];
-
 
   Future<void> _pickAndUpload(Function(String) onUploaded) async {
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
-      // ⚠️ Acá deberías llamar a tu servicio de Cloudinary
-      final fakeUrl = picked.path;
+      final fakeUrl = picked.path; // ⚠️ reemplazar por upload a Cloudinary
       setState(() => onUploaded(fakeUrl));
     }
   }
@@ -72,7 +159,6 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
       setState(() => _error = "Completa todos los campos y acepta los términos");
       return;
     }
-
     if (_fotoPerfil == null ||
         _fotoDniFrente == null ||
         _fotoDniDorso == null ||
@@ -93,25 +179,37 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
       matricula: _matricula.text.trim(),
       especialidad: _especialidad.text.trim(),
       telefono: _phone.text.trim(),
-      provincia: _provincia, // siempre CABA
+      provincia: _provincia,
       localidad: _localidad!,
       dni: _dni.text.trim(),
       fotoPerfil: _fotoPerfil,
       fotoDniFrente: _fotoDniFrente,
       fotoDniDorso: _fotoDniDorso,
       selfieDni: _selfieDni,
+      tipo: _tipo,
     );
 
     setState(() => _loading = false);
     if (!mounted) return;
 
-    if (result != null) {
+    if (result["ok"] == true) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cuenta creada. ¡Bienvenido DocYa Pro!')),
+      final mensaje = result["mensaje"] ??
+          "Cuenta creada como $_tipo. Revisa tu correo para activar tu cuenta.";
+      DocYaSnackbar.show(
+        context,
+        title: "✅ Registro exitoso",
+        message: mensaje,
+        type: SnackType.success,
       );
     } else {
-      setState(() => _error = 'No se pudo registrar.');
+      final errorMsg = result["detail"] ?? "No se pudo registrar.";
+      DocYaSnackbar.show(
+        context,
+        title: "⚠️ Error",
+        message: errorMsg,
+        type: SnackType.error,
+      );
     }
   }
 
@@ -132,7 +230,7 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: const Text("Registro Médico"),
+        title: const Text("Registro Profesional"),
         centerTitle: true,
         backgroundColor: const Color(0xFF14B8A6),
         foregroundColor: Colors.white,
@@ -165,9 +263,35 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
                       ),
                       const SizedBox(height: 24),
 
+                      // Radio médico/enfermero
+                      Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text("Médico"),
+                              value: "medico",
+                              groupValue: _tipo,
+                              onChanged: (val) =>
+                                  setState(() => _tipo = val ?? "medico"),
+                            ),
+                          ),
+                          Expanded(
+                            child: RadioListTile<String>(
+                              title: const Text("Enfermero"),
+                              value: "enfermero",
+                              groupValue: _tipo,
+                              onChanged: (val) =>
+                                  setState(() => _tipo = val ?? "enfermero"),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
                       TextFormField(
                         controller: _name,
-                        decoration: _inputStyle("Nombre y apellido", Icons.person),
+                        decoration:
+                            _inputStyle("Nombre y apellido", Icons.person),
                         validator: (v) =>
                             (v == null || v.isEmpty) ? 'Requerido' : null,
                       ),
@@ -204,36 +328,37 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Subida de imágenes
+                      // Fotos
                       ElevatedButton.icon(
-                        onPressed: () => _pickAndUpload((url) => _fotoPerfil = url),
+                        onPressed: () =>
+                            _pickAndUpload((url) => _fotoPerfil = url),
                         icon: const Icon(Icons.person),
                         label: Text(_fotoPerfil == null
                             ? "Subir foto de perfil"
                             : "✔ Foto de perfil cargada"),
                       ),
                       const SizedBox(height: 12),
-
                       ElevatedButton.icon(
-                        onPressed: () => _pickAndUpload((url) => _fotoDniFrente = url),
+                        onPressed: () =>
+                            _pickAndUpload((url) => _fotoDniFrente = url),
                         icon: const Icon(Icons.credit_card),
                         label: Text(_fotoDniFrente == null
                             ? "Subir DNI frente"
                             : "✔ Frente cargado"),
                       ),
                       const SizedBox(height: 12),
-
                       ElevatedButton.icon(
-                        onPressed: () => _pickAndUpload((url) => _fotoDniDorso = url),
+                        onPressed: () =>
+                            _pickAndUpload((url) => _fotoDniDorso = url),
                         icon: const Icon(Icons.credit_card),
                         label: Text(_fotoDniDorso == null
                             ? "Subir DNI dorso"
                             : "✔ Dorso cargado"),
                       ),
                       const SizedBox(height: 12),
-
                       ElevatedButton.icon(
-                        onPressed: () => _pickAndUpload((url) => _selfieDni = url),
+                        onPressed: () =>
+                            _pickAndUpload((url) => _selfieDni = url),
                         icon: const Icon(Icons.camera_alt),
                         label: Text(_selfieDni == null
                             ? "Subir selfie con DNI"
@@ -241,15 +366,12 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Selector de comuna (localidad)
                       DropdownButtonFormField<String>(
                         value: _localidad,
                         decoration: _inputStyle("Comuna", Icons.location_city),
                         items: _comunas
-                            .map((comuna) => DropdownMenuItem(
-                                  value: comuna,
-                                  child: Text(comuna),
-                                ))
+                            .map((c) =>
+                                DropdownMenuItem(value: c, child: Text(c)))
                             .toList(),
                         onChanged: (val) => setState(() => _localidad = val),
                         validator: (v) =>
@@ -281,8 +403,8 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
 
                       TextFormField(
                         controller: _confirm,
-                        decoration:
-                            _inputStyle("Confirmar contraseña", Icons.check_circle),
+                        decoration: _inputStyle(
+                            "Confirmar contraseña", Icons.check_circle),
                         obscureText: true,
                         validator: (v) =>
                             v != _password.text ? 'No coincide' : null,
@@ -292,16 +414,13 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
                       CheckboxListTile(
                         value: _aceptaCondiciones,
                         activeColor: const Color(0xFF14B8A6),
-                        onChanged: (val) {
-                          setState(() => _aceptaCondiciones = val ?? false);
-                        },
+                        onChanged: (val) =>
+                            setState(() => _aceptaCondiciones = val ?? false),
                         title: Row(
                           children: [
                             const Expanded(
-                              child: Text(
-                                "Acepto los Términos y Condiciones",
-                                style: TextStyle(fontSize: 13),
-                              ),
+                              child: Text("Acepto los Términos y Condiciones",
+                                  style: TextStyle(fontSize: 13)),
                             ),
                             GestureDetector(
                               onTap: () {
@@ -328,8 +447,7 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
 
                       if (_error != null) ...[
                         const SizedBox(height: 12),
-                        Text(_error!,
-                            style: const TextStyle(color: Colors.red)),
+                        Text(_error!, style: const TextStyle(color: Colors.red)),
                       ],
 
                       const SizedBox(height: 24),
@@ -349,15 +467,14 @@ class _RegisterScreenProState extends State<RegisterScreenPro> {
                                   height: 22,
                                   width: 22,
                                   child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
+                                      strokeWidth: 2, color: Colors.white),
                                 )
                               : const Text(
                                   "Crear cuenta",
                                   style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                         ),
                       ),

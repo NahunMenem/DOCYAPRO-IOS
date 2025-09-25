@@ -53,7 +53,7 @@ class AuthService {
     }
   }
 
-  /// Login médico
+  /// Login médico o enfermero
   Future<Map<String, dynamic>?> loginMedico(
       String email, String password) async {
     try {
@@ -69,8 +69,10 @@ class AuthService {
         // ✅ aceptar tanto si viene plano como si viene dentro de "medico"
         final medico = data['medico'] ?? {};
 
-        final medicoId = data['medico_id']?.toString() ?? medico['id']?.toString();
+        final medicoId =
+            data['medico_id']?.toString() ?? medico['id']?.toString();
         final fullName = data['full_name'] ?? medico['full_name'];
+        final tipo = data['tipo'] ?? medico['tipo'] ?? "medico";
 
         await saveToken("auth_token_medico", data['access_token']);
 
@@ -78,7 +80,8 @@ class AuthService {
           "access_token": data['access_token'],
           "medico_id": medicoId,
           "full_name": fullName,
-          "validado": medico['validado'] ?? true, // por defecto true si ya validado
+          "tipo": tipo,
+          "validado": medico['validado'] ?? true,
         };
       } else {
         print("❌ Error backend loginMedico: ${res.statusCode} - ${res.body}");
@@ -141,13 +144,14 @@ class AuthService {
     }
   }
 
-  /// Registro médico
-  Future<Map<String, dynamic>?> registerMedico({
+  /// Registro profesional (médico o enfermero)
+  Future<Map<String, dynamic>> registerMedico({
     required String name,
     required String email,
     required String password,
     required String matricula,
     required String especialidad,
+    String tipo = "medico",
     String? telefono,
     String? provincia,
     String? localidad,
@@ -167,6 +171,7 @@ class AuthService {
           'password': password,
           'matricula': matricula,
           'especialidad': especialidad,
+          'tipo': tipo,
           'telefono': telefono,
           'provincia': provincia,
           'localidad': localidad,
@@ -178,23 +183,32 @@ class AuthService {
         }),
       );
 
+      final data = jsonDecode(res.body);
+
       if (res.statusCode == 200 || res.statusCode == 201) {
-        final data = jsonDecode(res.body);
-        await saveToken("auth_token_medico", data['access_token']);
+        await saveToken("auth_token_medico", data['access_token'] ?? "");
+        final medico = data['medico'];
+
         return {
+          "ok": data["ok"] ?? true,
+          "mensaje": data["mensaje"] ??
+              "Cuenta creada correctamente. Revisa tu correo para activarla.",
           "access_token": data['access_token'],
-          "medico_id": data['medico']['id'].toString(),
-          "full_name": data['medico']['full_name'],
-          "validado": data['medico']['validado'] ?? false,
+          "medico_id": medico?['id']?.toString(),
+          "full_name": medico?['full_name'],
+          "tipo": medico?['tipo'] ?? tipo,
+          "validado": medico?['validado'] ?? false,
         };
       } else {
         print("❌ Error backend registerMedico: ${res.body}");
-        return null;
+        return {
+          "ok": false,
+          "detail": data["detail"] ?? "No se pudo registrar."
+        };
       }
     } catch (e) {
       print("❌ Error en registerMedico: $e");
-      return null;
+      return {"ok": false, "detail": "Error de conexión: $e"};
     }
   }
-
 }

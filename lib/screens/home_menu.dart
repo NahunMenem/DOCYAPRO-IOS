@@ -47,6 +47,7 @@ class _HomeMenuState extends State<HomeMenu> {
               pacienteNombre:
                   _consultaActiva!["paciente_nombre"] ?? "Paciente",
               direccion: _consultaActiva!["direccion"],
+              telefono: _consultaActiva!["telefono"] ?? "Sin número", // ✅ corregido
               motivo: _consultaActiva!["motivo"],
               lat: _consultaActiva!["lat"] ?? 0.0, // 👈 fallback
               lng: _consultaActiva!["lng"] ?? 0.0, // 👈 fallback

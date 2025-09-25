@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../widgets/docya_snackbar.dart'; // 👈 Importa el snackbar
 
 class EditarAliasScreen extends StatefulWidget {
   final String medicoId;
@@ -44,15 +45,29 @@ class _EditarAliasScreenState extends State<EditarAliasScreen> {
       );
 
       if (response.statusCode == 200) {
-        if (mounted) Navigator.pop(context, _aliasController.text);
+        if (mounted) {
+          DocYaSnackbar.show(
+            context,
+            title: "✅ Guardado",
+            message: "Alias actualizado correctamente",
+            type: SnackType.success,
+          );
+          Navigator.pop(context, _aliasController.text);
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("❌ Error guardando alias")),
+        DocYaSnackbar.show(
+          context,
+          title: "❌ Error",
+          message: "No se pudo guardar el alias",
+          type: SnackType.error,
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("⚠️ Error: $e")),
+      DocYaSnackbar.show(
+        context,
+        title: "⚠️ Error",
+        message: "Error de conexión: $e",
+        type: SnackType.warning,
       );
     } finally {
       if (mounted) setState(() => _loading = false);

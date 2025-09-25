@@ -38,10 +38,17 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   Future<void> _cargarPerfil() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+
       final res = await http.get(
         Uri.parse("https://docya-railway-production.up.railway.app/medicos/${widget.medicoId}"),
-        headers: {"Content-Type": "application/json"},
+        headers: {
+          "Content-Type": "application/json",
+          if (token != null) "Authorization": "Bearer $token",
+        },
       );
+
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         setState(() {
@@ -95,10 +102,34 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 
   Future<void> _cerrarSesion() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cerrar sesión"),
+        content: const Text("¿Seguro que quieres cerrar sesión?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancelar"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Cerrar"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true) return;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, "/login");
+
+    // Reemplaza toda la navegación y vuelve al login
+    Navigator.pushNamedAndRemoveUntil(context, "/login", (route) => false);
   }
 
   @override

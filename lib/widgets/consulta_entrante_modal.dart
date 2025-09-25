@@ -4,19 +4,30 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../screens/MedicoEnCasaScreen.dart';
+import '../screens/EnfermeroEnCasaScreen.dart';
+
+// 🚨 Bandera global para evitar abrir más de un modal
+bool _modalConsultaAbierto = false;
 
 /// 🚀 Modal de consulta entrante tipo Uber con distancia y ETA
-Future<bool?> mostrarConsultaEntrante(BuildContext context, String medicoId) async {
+Future<bool?> mostrarConsultaEntrante(BuildContext context, String profesionalId) async {
+  if (_modalConsultaAbierto) {
+    print("⚠️ Ya hay un modal abierto, no se muestra otro");
+    return null;
+  }
+  _modalConsultaAbierto = true;
+
   int segundosRestantes = 20;
   Timer? timer;
 
   // 🔹 Pedimos la consulta real al backend
   final response = await http.get(
-    Uri.parse("https://docya-railway-production.up.railway.app/consultas/asignadas/$medicoId"),
+    Uri.parse("https://docya-railway-production.up.railway.app/consultas/asignadas/$profesionalId"),
     headers: {"Content-Type": "application/json"},
   );
 
   if (response.statusCode != 200) {
+    _modalConsultaAbierto = false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("⚠️ No se pudo obtener la consulta")),
     );
@@ -27,6 +38,7 @@ Future<bool?> mostrarConsultaEntrante(BuildContext context, String medicoId) asy
   final datos = consulta["consulta"] ?? consulta;
 
   if (datos == null || datos["id"] == null) {
+    _modalConsultaAbierto = false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("📭 No hay consultas disponibles")),
     );
@@ -43,7 +55,10 @@ Future<bool?> mostrarConsultaEntrante(BuildContext context, String medicoId) asy
   String distanciaInfo =
       "${datos["distancia_km"] ?? "?"} km • ${datos["tiempo_estimado_min"] ?? "?"} min";
 
-  return showModalBottomSheet<bool>(
+  // ✅ tipo de profesional (médico o enfermero)
+  String tipo = datos["tipo"] ?? "medico";
+
+  final result = await showModalBottomSheet<bool>(
     context: context,
     isDismissible: false,
     enableDrag: false,
@@ -212,7 +227,7 @@ Future<bool?> mostrarConsultaEntrante(BuildContext context, String medicoId) asy
                                     "https://docya-railway-production.up.railway.app/consultas/${datos["id"]}/rechazar",
                                   ),
                                   headers: {"Content-Type": "application/json"},
-                                  body: jsonEncode({"medico_id": medicoId}),
+                                  body: jsonEncode({"medico_id": profesionalId}),
                                 );
                               },
                               child: const Text(
@@ -240,34 +255,55 @@ Future<bool?> mostrarConsultaEntrante(BuildContext context, String medicoId) asy
                                     "https://docya-railway-production.up.railway.app/consultas/${datos["id"]}/aceptar",
                                   ),
                                   headers: {"Content-Type": "application/json"},
-                                  body: jsonEncode({"medico_id": medicoId}),
+                                  body: jsonEncode({"medico_id": profesionalId}),
                                 );
 
                                 if (resp.statusCode == 200) {
                                   if (context.mounted) {
-                                    // 1. Cerrar el modal
                                     Navigator.of(context, rootNavigator: true).pop(true);
 
-                                    // 2. Lanzar navegación en el próximo frame
                                     Future.microtask(() {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => MedicoEnCasaScreen(
-                                            consultaId: datos["id"],
-                                            medicoId: int.parse(medicoId),
-                                            pacienteUuid: datos["paciente_uuid"],
-                                            pacienteNombre: datos["paciente_nombre"] ?? "Paciente",
-                                            direccion: datos["direccion"] ?? "Dirección desconocida",
-                                            motivo: datos["motivo"] ?? "Sin motivo",
-                                            lat: (datos["lat"] as num?)?.toDouble() ?? 0.0,
-                                            lng: (datos["lng"] as num?)?.toDouble() ?? 0.0,
-                                            onFinalizar: () {
-                                              Navigator.of(context).popUntil((r) => r.isFirst);
-                                            },
+                                      if (tipo == "enfermero") {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => EnfermeroEnCasaScreen(
+                                              consultaId: datos["id"],
+                                              enfermeroId: int.parse(profesionalId),
+                                              pacienteUuid: datos["paciente_uuid"],
+                                              pacienteNombre: pacienteNombre,
+                                              direccion: datos["direccion"] ?? "Dirección desconocida",
+                                              telefono: datos["paciente_telefono"] ?? "Sin número",
+                                              motivo: datos["motivo"] ?? "Sin motivo",
+                                              lat: (datos["lat"] as num?)?.toDouble() ?? 0.0,
+                                              lng: (datos["lng"] as num?)?.toDouble() ?? 0.0,
+                                              onFinalizar: () {
+                                                Navigator.of(context).popUntil((r) => r.isFirst);
+                                              },
+                                            ),
                                           ),
-                                        ),
-                                      );
+                                        );
+                                      } else {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => MedicoEnCasaScreen(
+                                              consultaId: datos["id"],
+                                              medicoId: int.parse(profesionalId),
+                                              pacienteUuid: datos["paciente_uuid"],
+                                              pacienteNombre: pacienteNombre,
+                                              direccion: datos["direccion"] ?? "Dirección desconocida",
+                                              telefono: datos["paciente_telefono"] ?? "Sin número",
+                                              motivo: datos["motivo"] ?? "Sin motivo",
+                                              lat: (datos["lat"] as num?)?.toDouble() ?? 0.0,
+                                              lng: (datos["lng"] as num?)?.toDouble() ?? 0.0,
+                                              onFinalizar: () {
+                                                Navigator.of(context).popUntil((r) => r.isFirst);
+                                              },
+                                            ),
+                                          ),
+                                        );
+                                      }
                                     });
                                   }
                                 } else {
@@ -299,5 +335,8 @@ Future<bool?> mostrarConsultaEntrante(BuildContext context, String medicoId) asy
     },
   ).whenComplete(() {
     timer?.cancel();
+    _modalConsultaAbierto = false; // ✅ liberar bandera al cerrar
   });
+
+  return result;
 }

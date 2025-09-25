@@ -3,10 +3,109 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/auth_service.dart';
 import 'register_screen_pro.dart';
-import 'home_screen.dart'; // este es tu HomeScreenPro
+import 'home_menu.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'home_menu.dart';
+
+/// 🔹 Tipos de snackbar
+enum SnackType { success, error, info, warning }
+
+/// 🔹 Widget reutilizable DocYaSnackbar
+class DocYaSnackbar {
+  static void show(
+    BuildContext context, {
+    required String title,
+    required String message,
+    SnackType type = SnackType.success,
+  }) {
+    Color startColor;
+    Color endColor;
+    IconData icon;
+
+    switch (type) {
+      case SnackType.success:
+        startColor = const Color(0xFF14B8A6);
+        endColor = const Color(0xFF0F2027);
+        icon = Icons.check_circle_rounded;
+        break;
+      case SnackType.error:
+        startColor = Colors.redAccent;
+        endColor = const Color(0xFF2C5364);
+        icon = Icons.error_rounded;
+        break;
+      case SnackType.info:
+        startColor = Colors.blueAccent;
+        endColor = const Color(0xFF2C5364);
+        icon = Icons.info_rounded;
+        break;
+      case SnackType.warning:
+        startColor = Colors.amber;
+        endColor = const Color(0xFF2C5364);
+        icon = Icons.warning_amber_rounded;
+        break;
+    }
+
+    final snackBar = SnackBar(
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      content: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [startColor, endColor],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      duration: const Duration(seconds: 3),
+    );
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(snackBar);
+  }
+}
 
 class LoginScreenPro extends StatefulWidget {
   const LoginScreenPro({super.key});
@@ -20,7 +119,6 @@ class _LoginScreenProState extends State<LoginScreenPro> {
   final _password = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
-  String? _error;
 
   final _auth = AuthService();
 
@@ -29,7 +127,7 @@ class _LoginScreenProState extends State<LoginScreenPro> {
     await prefs.setString("auth_token_medico", token);
   }
 
-  // 👉 Nuevo: guardar FCM token en backend
+  // 👉 Guardar FCM token en backend
   Future<void> _enviarFcmTokenAlBackend(String medicoId) async {
     String? fcmToken = await FirebaseMessaging.instance.getToken();
     print("🔑 Token FCM obtenido: $fcmToken");
@@ -59,10 +157,7 @@ class _LoginScreenProState extends State<LoginScreenPro> {
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() => _loading = true);
 
     // loginMedico devuelve { access_token, medico_id, full_name }
     final loginData = await _auth.loginMedico(
@@ -78,9 +173,21 @@ class _LoginScreenProState extends State<LoginScreenPro> {
       // 🔔 Guardar FCM token en backend
       await _enviarFcmTokenAlBackend(loginData["medico_id"].toString());
 
+      DocYaSnackbar.show(
+        context,
+        title: "✅ Bienvenido",
+        message: "Hola ${loginData["full_name"]}, inicio de sesión exitoso.",
+        type: SnackType.success,
+      );
+
       _goHome(loginData["full_name"], loginData["medico_id"].toString());
     } else {
-      setState(() => _error = 'Email o contraseña inválidos.');
+      DocYaSnackbar.show(
+        context,
+        title: "⚠️ Error",
+        message: "Email o contraseña inválidos.",
+        type: SnackType.error,
+      );
     }
   }
 
@@ -95,8 +202,6 @@ class _LoginScreenProState extends State<LoginScreenPro> {
       ),
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -158,16 +263,10 @@ class _LoginScreenProState extends State<LoginScreenPro> {
                               labelText: 'Contraseña',
                               prefixIcon: Icon(Icons.lock_outline),
                             ),
-                            validator: (v) =>
-                                (v == null || v.length < 6)
-                                    ? 'Mínimo 6 caracteres'
-                                    : null,
+                            validator: (v) => (v == null || v.length < 6)
+                                ? 'Mínimo 6 caracteres'
+                                : null,
                           ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 14),
-                            Text(_error!,
-                                style: const TextStyle(color: Colors.red)),
-                          ],
                           const SizedBox(height: 20),
                           SizedBox(
                             width: double.infinity,
@@ -202,10 +301,12 @@ class _LoginScreenProState extends State<LoginScreenPro> {
                               TextButton(
                                 onPressed: () {
                                   Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              const RegisterScreenPro()));
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const RegisterScreenPro(),
+                                    ),
+                                  );
                                 },
                                 child: const Text('Registrate'),
                               )
